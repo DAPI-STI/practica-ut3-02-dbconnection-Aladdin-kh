@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from mysql.connector.connection import MySQLConnection
 
-from .db import execute, fetch_all
+from db import execute, fetch_all
+
 
 
 def listar_incidencias_activas(conn: MySQLConnection) -> list[dict]:
@@ -16,7 +17,18 @@ def listar_incidencias_activas(conn: MySQLConnection) -> list[dict]:
 
     Pista: se puede ordenar por prioridad usando CASE en SQL.
     """
-    raise NotImplementedError
+    sql = """SELECT * FROM incidencias
+             WHERE estado <> 'cerrada'
+                ORDER BY
+                    CASE prioridad
+                        WHEN 'alta' THEN 1
+                        WHEN 'media' THEN 2
+                        WHEN 'baja' THEN 3
+                        ELSE 4
+                    END,
+                    fecha_apertura ASC
+    """
+    return fetch_all(conn, sql)
 
 
 def listar_incidencias_sin_tecnico(conn: MySQLConnection) -> list[dict]:
@@ -28,6 +40,12 @@ def listar_incidencias_sin_tecnico(conn: MySQLConnection) -> list[dict]:
     - estado <> 'cerrada'
     - ordenar por fecha_apertura ascendente
     """
+    sql = """SELECT * FROM incidencias
+                WHERE tecnico_id IS NULL
+                    AND estado <> 'cerrada'
+                ORDER BY fecha_apertura ASC
+    """
+    return fetch_all(conn, sql)
     raise NotImplementedError
 
 
@@ -49,6 +67,17 @@ def crear_incidencia(conn: MySQLConnection, equipo_id: int, descripcion: str, pr
 
     Debe devolver el número de filas afectadas (normalmente 1).
     """
+    if not descripcion.strip():
+        raise ValueError("La descripción no puede estar vacía o ser solo espacios.")
+    if prioridad not in ("baja", "media", "alta"):
+        raise ValueError("La prioridad debe ser 'baja', 'media' o 'alta'.")
+    if equipo_id <= 0:
+        raise ValueError("El equipo_id debe ser un entero positivo.")
+    sql = """INSERT INTO incidencias (equipo_id, descripcion, prioridad, tecnico_id, estado, fecha_apertura, fecha_cierre)
+                VALUES (%s, %s, %s, NULL, 'abierta', NOW(), NULL)
+    """
+    params = (equipo_id, descripcion, prioridad)
+    return execute(conn, sql, params)
     raise NotImplementedError
 
 
@@ -64,6 +93,17 @@ def asignar_tecnico(conn: MySQLConnection, incidencia_id: int, tecnico_id: int) 
     - Solo debe actualizar si estado <> 'cerrada'
     - Debe devolver filas afectadas (0 si no existe o ya está cerrada)
     """
+    if incidencia_id <= 0:
+        raise ValueError("El incidencia_id debe ser un entero positivo.")
+    if tecnico_id <= 0:
+        raise ValueError("El tecnico_id debe ser un entero positivo.")
+    
+    sql = """UPDATE incidencias
+                    SET tecnico_id = %s, estado = 'en_proceso'
+                    WHERE id = %s AND estado <> 'cerrada'
+        """
+    params = (tecnico_id, incidencia_id)
+    return execute(conn, sql, params)
     raise NotImplementedError
 
 
@@ -81,6 +121,14 @@ def cerrar_incidencia(conn: MySQLConnection, incidencia_id: int) -> int:
     - Solo debe cerrar si estado <> 'cerrada'
     - Devuelve filas afectadas
     """
+    if incidencia_id <= 0:
+        raise ValueError("El incidencia_id debe ser un entero positivo.")
+    sql = """UPDATE incidencias
+                SET estado = 'cerrada', fecha_cierre = NOW()
+                WHERE id = %s AND estado <> 'cerrada'
+    """
+    params = (incidencia_id,)
+    return execute(conn, sql, params)
     raise NotImplementedError
 
 
@@ -98,4 +146,26 @@ def detalle_incidencias_join(conn: MySQLConnection) -> list[dict]:
     - LEFT JOIN tecnicos (opcional)
     - Ordenar por estado, prioridad DESC, fecha_apertura ASC
     """
+    sql = """SELECT i.id, i.descripcion, i.prioridad, i.estado, i.fecha_apertura, i.fecha_cierre,
+            e.tipo, e.modelo, e.ubicacion, e.estado AS estado_equipo,
+            t.nombre AS tecnico
+                FROM incidencias i
+                JOIN equipos e ON i.equipo_id = e.id
+                LEFT JOIN tecnicos t ON i.tecnico_id = t.id
+                ORDER BY
+                    CASE i.estado
+                        WHEN 'abierta' THEN 1
+                        WHEN 'en_proceso' THEN 2
+                        WHEN 'cerrada' THEN 3
+                        ELSE 4
+                    END,
+                    CASE i.prioridad
+                        WHEN 'alta' THEN 1
+                        WHEN 'media' THEN 2
+                        WHEN 'baja' THEN 3
+                        ELSE 4
+                    END,
+                    i.fecha_apertura ASC
+        """
+    return fetch_all(conn, sql)
     raise NotImplementedError

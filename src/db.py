@@ -8,10 +8,12 @@ import mysql.connector
 from mysql.connector.connection import MySQLConnection
 
 
+
+
 @dataclass(frozen=True)
 class DBConfig:
     """Configuración de conexión a la base de datos."""
-    host: str
+    host: str 
     port: int
     database: str
     user: str
@@ -34,7 +36,27 @@ def load_config_from_env() -> DBConfig:
     Recomendación:
     - Validar que DB_PORT sea un número entero.
     """
-    raise NotImplementedError
+    DBConfig(
+        host = os.getenv("DB_HOST", "localhost"),
+        port=int(os.getenv("DB_PORT", "3306")),
+        database=os.getenv("DB_NAME", "sti_incidencias"),
+        user=os.getenv
+        ("DB_USER", "sti_app"),
+        password=os.getenv("DB_PASSWORD", "sti_app_2026")
+    )   
+    
+    if "DB_PORT" in os.environ:
+        try:
+            int(os.environ["DB_PORT"])
+        except ValueError:
+            raise ValueError("DB_PORT debe ser un número entero")
+    host = os.getenv("DB_HOST", "localhost")
+    port = int(os.getenv("DB_PORT", "3306"))
+    database = os.getenv("DB_NAME", "sti_incidencias")
+    user = os.getenv("DB_USER", "sti_app")
+    password = os.getenv("DB_PASSWORD", "sti_app_2026")
+
+    return DBConfig(host, port, database, user, password)
 
 
 def get_connection(cfg: Optional[DBConfig] = None) -> MySQLConnection:
@@ -44,7 +66,15 @@ def get_connection(cfg: Optional[DBConfig] = None) -> MySQLConnection:
     - Si cfg es None, debe llamar a load_config_from_env().
     - Debe usar mysql.connector.connect(...) con los parámetros de cfg.
     """
-    raise NotImplementedError
+    if cfg is None:
+        cfg = load_config_from_env()
+    return mysql.connector.connect(
+        host=cfg.host,
+        port=cfg.port,
+        database=cfg.database,
+        user=cfg.user,
+        password=cfg.password
+    )
 
 
 def fetch_all(conn: MySQLConnection, query: str, params: Optional[Iterable[Any]] = None) -> list[dict]:
@@ -57,7 +87,12 @@ def fetch_all(conn: MySQLConnection, query: str, params: Optional[Iterable[Any]]
     - Obtener filas con cur.fetchall()
     - Cerrar el cursor siempre (try/finally)
     """
-    raise NotImplementedError
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(query, params or ())
+        return cursor.fetchall()
+    finally:
+        cursor.close()
 
 
 def execute(conn: MySQLConnection, query: str, params: Optional[Iterable[Any]] = None) -> int:
@@ -71,4 +106,11 @@ def execute(conn: MySQLConnection, query: str, params: Optional[Iterable[Any]] =
     - Devolver cur.rowcount
     - Cerrar el cursor siempre (try/finally)
     """
-    raise NotImplementedError
+    cursor = conn.cursor()
+    try:
+        cursor.execute(query, params or ())
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        cursor.close()
+    
