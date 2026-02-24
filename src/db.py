@@ -7,7 +7,8 @@ from typing import Any, Iterable, Optional
 import mysql.connector
 from mysql.connector.connection import MySQLConnection
 
-
+from dotenv import load_dotenv
+load_dotenv()
 
 
 @dataclass(frozen=True)
